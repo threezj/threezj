@@ -65,3 +65,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 ```
+- 3、使用token进行请求
+用户在成功登录后将收到一个 access token。可以在后续请求中将该 token 作为 Bearer token 发送。
+
+GET /some-protected-route HTTP/1.1
+Host: example.com
+Authorization: Bearer YOUR_ACCESS_TOKEN
