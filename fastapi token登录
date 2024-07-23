@@ -1,0 +1,67 @@
+# fastapi获取JWT(json web token)认证分为三个步骤，用户认证、生成token，获取token进行后续请求。
+# 其中又要包括session依赖、token依赖，
+- 1、用户身份认证
+为了获取access_token，需要对用户名、密码进行认证（authenticate_user），这通常通过登录节点来实现。
+```
+@router.post("/login/access-token")
+def login_access_token(
+    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+) -> Token:
+    """
+    OAuth2 compatible token login, get an access token for future requests
+    """
+    user = crud.authenticate(
+        session=session, email=form_data.username, password=form_data.password
+    )
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    elif not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    return Token(
+        access_token=security.create_access_token(
+            user.id, expires_delta=access_token_expires
+        )
+    )
+
+```
+SessionDep依赖一般单独在deps.py文件中定义：SessionDep = SessionDep = Annotated[Session, Depends(get_db)]
+Annotated[OAuth2PasswordRequestForm包括用户名密码会话格式（第一个参数表示类型），第二个参数Depends()表示获取的方式，参数一般是一个方法]
+
+- 2、生成token
+用户认证成功后，一般生成一个JWT token。通常会用一个密钥来签署这个token。这通常会放在security.py文件来完成
+```
+from datetime import datetime, timedelta
+from typing import Any
+
+import jwt
+from passlib.context import CryptContext
+
+from visitorsystem.app.core.config import settings
+
+# 用于处理密码的哈希与验证
+# CryptContext 是一个用于管理密码哈希的上下文，支持多种哈希算法。这里使用的是 bcrypt，这是一个安全的哈希算法。
+# deprecated="auto" 表示在未来使用的哈希算法会自动标记为过时。
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+ALGORITHM = "HS256"
+
+# 参数：subject：通常是用户的标识符（如用户 ID）
+# 流程：
+# 计算令牌的过期时间。
+# 创建一个字典 to_encode，其中包含 exp（过期时间）和 sub（主题，通常是用户 ID）。
+# 使用 jwt.encode 函数生成 JWT，使用 settings.SECRET_KEY 作为密钥，并指定算法
+def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
+    expire = datetime.utcnow() + expires_delta
+    to_encode = {"exp": expire, "sub": str(subject)}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# 验证密码
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+# 获取密码哈希
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+```
