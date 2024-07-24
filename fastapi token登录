@@ -67,7 +67,76 @@ def get_password_hash(password: str) -> str:
 ```
 - 3、使用token进行请求
 用户在成功登录后将收到一个 access token。可以在后续请求中将该 token 作为 Bearer token 发送。
-
+```
 GET /some-protected-route HTTP/1.1
 Host: example.com
 Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+- 4、验证Token
+在后续请求中，FastApi会通过依赖验证这个token的实现，通往在依赖项中进行。
+```
+from collections.abc import Generator
+from typing import Annotated
+
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jwt.exceptions import InvalidTokenError
+from pydantic import ValidationError
+from sqlmodel import Session
+
+from visitorsystem.app.core import security
+from visitorsystem.app.core.config import settings
+from visitorsystem.app.core.db import engine
+from visitorsystem.app.models import TokenPayload, User
+
+reusable_oauth2 = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/login/access-token"
+)
+
+
+def get_db() -> Generator[Session, None, None]:
+    with Session(engine) as session:
+        yield session
+
+
+SessionDep = Annotated[Session, Depends(get_db)]
+TokenDep = Annotated[str, Depends(reusable_oauth2)]
+
+
+def get_current_user(session: SessionDep, token: TokenDep) -> User:
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+        token_data = TokenPayload(**payload)
+    except (InvalidTokenError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials"
+        )
+    user = session.get(User, token_data.sub)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def get_current_active_superuser(current_user: CurrentUser) -> User:
+    if not current_user.is_active:
+        raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
+    return current_user
+```
+代码解释：
+- Oauth2密码Bearer
+  用来处理Bearer Token密码模式，返回一个对象。需要指定一个获取token的地址，一般是登录地址
+- 数据库会话
+  get_db函数用于创建数据库会话并将其作为生成器返回，然后用with关闭会话，其中engine为创建的数据库连接
+- get_current_user:jwt.decode解码获得负载信息，并传递给TokenPayload模型进行验证，然后根据token中的sub（用户id）从数据库中获取用户信息。
+
+
