@@ -4,6 +4,7 @@ venv 是 Python 自带的模块，用于创建轻量级的虚拟环境。使用�
 要创建一个新的虚拟环境，可以使用以下命令：
 
 ```python3 -m venv <env_name>```
+
 其中 <env_name> 是你想要给虚拟环境起的名字。例如，创建一个名为 myenv 的虚拟环境：
 
 ```python3 -m venv myenv```
