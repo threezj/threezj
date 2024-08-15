@@ -56,6 +56,7 @@ venv 是 Python 自带的模块，用于创建轻量级的虚拟环境。使用�
 
 
 基本目录结构
+```
 my_project/
 │
 ├── myenv/                 # 虚拟环境目录
@@ -75,4 +76,4 @@ my_project/
 ├── requirements.txt       # 依赖文件（可选）
 ├── .gitignore             # Git忽略文件（如果使用Git）
 └── README.md              # 项目说明文件
-
+```
